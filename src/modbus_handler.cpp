@@ -1,7 +1,3 @@
-#ifdef DISABLE_MODBUS
-// If DISABLE_MODBUS is defined, do not compile the content of modbus_handler.cpp
-#else
-
 #include "modbus_handler.h"
 
 // Global variables
@@ -27,10 +23,10 @@ uint16_t highWord(uint32_t dword) {
 }
 
 void initModbus() {
-    Serial1.begin(BAUDRATE, PARITY, 16, 17);
-    mb.begin(&Serial1, TXEN_PIN);
+    Serial2.begin(BAUDRATE, PARITY, MODBUS_RX_PIN, MODBUS_TX_PIN);
+    mb.begin(&Serial2, TXEN_PIN);
     mb.slave(SLAVE_ID);
-    Serial.println("Modbus Initialized.");
+    Serial.println("Modbus slave initialized on GPIO 16/17");
 }
 
 void processInput(String input) {
@@ -135,7 +131,5 @@ void processInput(String input) {
 // }
 
 // void processInt16(uint16_t regn, int16_t data) {
-//   mb.addHreg(regn,0x01,2);
 //   mb.Hreg(regn, (uint16_t)data);
 // }
-#endif

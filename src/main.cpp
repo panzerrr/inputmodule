@@ -5,6 +5,7 @@
 #include "relay_controller.h"
 #include "sine_wave_generator.h"
 #include "device_id.h"
+#include "modbus_handler.h"
 
 char signalModes[3] = {'v', 'v', 'v'};
 // Timing variables
@@ -35,7 +36,7 @@ void setup() {
     initRelayController();
     Serial.println("Relay controller initialized");
 
-    // 开机默认三路电压模式
+    // Default to three-channel voltage mode on startup
     setRelayMode(1, 'v');
     setRelayMode(2, 'v');
     setRelayMode(3, 'v');
@@ -50,9 +51,13 @@ void setup() {
     // Initialize RS-485 command handler
     initRS485CommandHandler();
     
+    // Initialize Modbus slave
+    initModbus();
+    
     Serial.println("System initialization complete");
     Serial.println("USB Serial: Debug output only");
     Serial.println("RS-485 Serial: Command interface (GPIO 19=TX, 18=RX, 21=DE)");
+    Serial.println("Modbus Slave: Interface (GPIO 17=TX, 16=RX)");
     Serial.println("Ready to receive commands...");
 }
 
@@ -65,6 +70,9 @@ void loop() {
         // Command was processed, no need to do anything else
         // The command handler will send responses automatically
     }
+    
+    // Handle Modbus slave tasks
+    mb.task();
     
     // Update sine wave generator
     updateSineWave();
@@ -267,6 +275,12 @@ void handleUSBSerialCommands() {
         else if (command.startsWith("help")) {
             printHelp();
         }
+        else if (command.startsWith("modbus")) {
+            // Modbus configuration command: modbus <reg_index>,<address>,<type>,<value>
+            // Example: modbus 0,1000,I,12345
+            String modbusCmd = command.substring(7); // Remove "modbus " prefix
+            processInput(modbusCmd);
+        }
         else if (command.length() > 0) {
             Serial.println("Unknown command. Type 'help' for available commands.");
         }
@@ -290,6 +304,9 @@ void printHelp() {
     Serial.println("current <value>         - Set current output (0-25mA)");
     Serial.println("sine <mode> <c> <a> <p> - Start sine wave");
     Serial.println("stop                    - Stop sine wave");
+    Serial.println("modbus <reg>,<addr>,<type>,<value> - Configure Modbus register");
+    Serial.println("  Example: modbus 0,1000,I,12345   - Set register 0 to address 1000, type I, value 12345");
+    Serial.println("  Types: I(U64), F(Float), S(Int16)");
     Serial.println("help                    - Show this help");
     Serial.println("========================================\n");
 } 

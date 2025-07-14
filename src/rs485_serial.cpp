@@ -10,19 +10,15 @@ static RS485Command lastCommand;
 // Forward declaration
 bool processCommand();
 
-// HardwareSerial instances for both RS-485 interfaces
-HardwareSerial RS485Serial(RS485_SERIAL_NUM);  // Serial1 for work mode (接收外界485信号)
-HardwareSerial ModbusSerial(MODBUS_SERIAL_NUM); // Serial2 for Modbus output (z1y1)
+// HardwareSerial instance for RS-485 interface
+HardwareSerial RS485Serial(RS485_SERIAL_NUM);  // Serial1 for work mode (receiving external RS-485 signals)
 
 /**
- * Initialize RS-485 serial communication (both interfaces)
+ * Initialize RS-485 serial communication
  */
 void initRS485Serial() {
-    // Initialize work mode RS-485 serial (接收外界485信号)
+    // Initialize work mode RS-485 serial (receiving external RS-485 signals)
     RS485Serial.begin(RS485_BAUDRATE, RS485_PARITY, RS485_RX_PIN, RS485_TX_PIN);
-    
-    // Initialize Modbus output interface
-    initModbusSerial();
     
     // Get device ID from hardware jumpers
     initDeviceIDPins();
@@ -34,17 +30,7 @@ void initRS485Serial() {
     lastCommand.valid = false;
     
     Serial.printf("Work Mode RS-485: GPIO %d(TX), %d(RX)\n", RS485_TX_PIN, RS485_RX_PIN);
-    Serial.printf("Modbus Output: GPIO %d(TX), %d(RX)\n", MODBUS_TX_PIN, MODBUS_RX_PIN);
     Serial.printf("Device ID: %d, Baud Rate: %d\n", currentDeviceID, RS485_BAUDRATE);
-}
-
-/**
- * Initialize Modbus output interface
- */
-void initModbusSerial() {
-    // Initialize Modbus output serial (z1y1 - 输出Modbus信号)
-    ModbusSerial.begin(MODBUS_BAUDRATE, MODBUS_PARITY, MODBUS_RX_PIN, MODBUS_TX_PIN);
-    Serial.printf("Modbus output interface initialized\n");
 }
 
 /**
@@ -149,30 +135,6 @@ void sendRS485Response(uint8_t deviceID, uint8_t commandType, const uint8_t* dat
 }
 
 /**
- * Send Modbus command via Modbus output interface
- * @param deviceID Target device ID
- * @param commandType Command type
- * @param data Command data
- * @param length Data length
- */
-void sendModbusCommand(uint8_t deviceID, uint8_t commandType, const uint8_t* data, uint8_t length) {
-    if (length > RS485_MAX_COMMAND_LENGTH - 2) {
-        Serial.println("Modbus: Command too long");
-        return;
-    }
-    // Send Modbus command: [START][DEVICE_ID][COMMAND][DATA...][END]
-    ModbusSerial.write(0xAA); // Start byte
-    ModbusSerial.write(deviceID);
-    ModbusSerial.write(commandType);
-    if (length > 0 && data != nullptr) {
-        ModbusSerial.write(data, length);
-    }
-    ModbusSerial.write(0x55); // End byte
-    ModbusSerial.flush(); // Ensure all data is sent
-    Serial.printf("Modbus Command sent: Device=%d, Type=0x%02X, Length=%d\n", deviceID, commandType, length);
-}
-
-/**
  * Get the last received command
  * @return Pointer to the last received command
  */
@@ -186,14 +148,6 @@ RS485Command* getLastCommand() {
  */
 bool isRS485Available() {
     return RS485Serial.available() > 0;
-}
-
-/**
- * Check if Modbus interface is available
- * @return true if data is available
- */
-bool isModbusAvailable() {
-    return ModbusSerial.available() > 0;
 }
 
 /**

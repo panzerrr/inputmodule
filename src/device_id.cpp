@@ -18,17 +18,17 @@ void initDeviceIDPins() {
  * @return Returns the calculated device ID (0-31 for 5-bit, 0-15 for 4-bit)
  * 
  * Hardware setup:
- * - GPIO → 电阻 → GND (接地) = LOW = Bit set to 1 (有效位)
- * - GPIO → 悬空 (上拉) = HIGH = Bit set to 0 (无效位)
+ * - GPIO → Resistor → GND (grounded) = LOW = Bit set to 1 (active bit)
+ * - GPIO → Floating (pull-up) = HIGH = Bit set to 0 (inactive bit)
  * 
  * ID calculation: NO5 NO4 NO3 NO2 NO1 (5-bit binary)
  */
 uint8_t calculateDeviceID() {
     uint8_t id = 0;
-    if (digitalRead(NO1) == LOW) id |= 0x01;  // Bit 0 - IO23 (接地=有效=1)
-    if (digitalRead(NO2) == LOW) id |= 0x02;  // Bit 1 - IO12 (接地=有效=1)
-    if (digitalRead(NO3) == LOW) id |= 0x04;  // Bit 2 - IO4  (接地=有效=1)
-    if (digitalRead(NO4) == LOW) id |= 0x08;  // Bit 3 - IO5  (接地=有效=1)
-    if (digitalRead(NO5) == LOW) id |= 0x10;  // Bit 4 - IO32 (接地=有效=1)
+    if (digitalRead(NO1) == LOW) id |= 0x01;  // Bit 0 - IO23 (grounded=active=1)
+    if (digitalRead(NO2) == LOW) id |= 0x02;  // Bit 1 - IO12 (grounded=active=1)
+    if (digitalRead(NO3) == LOW) id |= 0x04;  // Bit 2 - IO4  (grounded=active=1)
+    if (digitalRead(NO4) == LOW) id |= 0x08;  // Bit 3 - IO5  (grounded=active=1)
+    if (digitalRead(NO5) == LOW) id |= 0x10;  // Bit 4 - IO32 (grounded=active=1)
     return id;
 }

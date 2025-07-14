@@ -20,11 +20,11 @@ void setupDeviceID() {
     
     // Show jumper status
     Serial.println("Jumper Status:");
-    Serial.printf("  NO1 (IO23): %s\n", digitalRead(NO1) == LOW ? "接地 (有效=1)" : "悬空 (无效=0)");
-    Serial.printf("  NO2 (IO12): %s\n", digitalRead(NO2) == LOW ? "接地 (有效=1)" : "悬空 (无效=0)");
-    Serial.printf("  NO3 (IO4):  %s\n", digitalRead(NO3) == LOW ? "接地 (有效=1)" : "悬空 (无效=0)");
-    Serial.printf("  NO4 (IO5):  %s\n", digitalRead(NO4) == LOW ? "接地 (有效=1)" : "悬空 (无效=0)");
-    Serial.printf("  NO5 (IO32): %s\n", digitalRead(NO5) == LOW ? "接地 (有效=1)" : "悬空 (无效=0)");
+    Serial.printf("  NO1 (IO23): %s\n", digitalRead(NO1) == LOW ? "Grounded (Active=1)" : "Floating (Inactive=0)");
+    Serial.printf("  NO2 (IO12): %s\n", digitalRead(NO2) == LOW ? "Grounded (Active=1)" : "Floating (Inactive=0)");
+    Serial.printf("  NO3 (IO4):  %s\n", digitalRead(NO3) == LOW ? "Grounded (Active=1)" : "Floating (Inactive=0)");
+    Serial.printf("  NO4 (IO5):  %s\n", digitalRead(NO4) == LOW ? "Grounded (Active=1)" : "Floating (Inactive=0)");
+    Serial.printf("  NO5 (IO32): %s\n", digitalRead(NO5) == LOW ? "Grounded (Active=1)" : "Floating (Inactive=0)");
     
     // Binary representation
     Serial.printf("Binary: %c%c%c%c%c\n", 

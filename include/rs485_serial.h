@@ -4,19 +4,12 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 
-// RS-485 Serial Configuration - 工作模式接收接口 (接收外界485信号)
+// RS-485 Serial Configuration - Work mode receiving interface (receiving external RS-485 signals)
 #define RS485_SERIAL_NUM 1        // Use Serial1 for receiving external RS-485
-#define RS485_TX_PIN 19           // GPIO 19 for TX (工作模式发送)
-#define RS485_RX_PIN 18           // GPIO 18 for RX (工作模式接收)
+#define RS485_TX_PIN 19           // GPIO 19 for TX (work mode transmit)
+#define RS485_RX_PIN 18           // GPIO 18 for RX (work mode receive)
 #define RS485_BAUDRATE 19200      // Baud rate
 #define RS485_PARITY SERIAL_8E1   // 8 data bits, Even parity, 1 stop bit
-
-// Modbus输出接口配置 (z1y1 - 输出Modbus信号)
-#define MODBUS_SERIAL_NUM 2       // Use Serial2 for Modbus output
-#define MODBUS_TX_PIN 17          // GPIO 17 for TX (Modbus输出)
-#define MODBUS_RX_PIN 16          // GPIO 16 for RX (Modbus输入)
-#define MODBUS_BAUDRATE 19200     // Modbus baud rate
-#define MODBUS_PARITY SERIAL_8E1  // 8 data bits, Even parity, 1 stop bit
 
 // Buffer sizes
 #define RS485_BUFFER_SIZE 64      // Receive buffer size
@@ -32,14 +25,9 @@ struct RS485Command {
 };
 
 /**
- * Initialize RS-485 serial communication (both interfaces)
+ * Initialize RS-485 serial communication
  */
 void initRS485Serial();
-
-/**
- * Initialize Modbus output interface
- */
-void initModbusSerial();
 
 /**
  * Process incoming RS-485 commands from work mode interface
@@ -57,15 +45,6 @@ bool processRS485Commands();
 void sendRS485Response(uint8_t deviceID, uint8_t commandType, const uint8_t* data, uint8_t length);
 
 /**
- * Send Modbus command via Modbus output interface
- * @param deviceID Target device ID
- * @param commandType Command type
- * @param data Command data
- * @param length Data length
- */
-void sendModbusCommand(uint8_t deviceID, uint8_t commandType, const uint8_t* data, uint8_t length);
-
-/**
  * Get the last received command
  * @return Pointer to the last received command
  */
@@ -76,12 +55,6 @@ RS485Command* getLastCommand();
  * @return true if data is available
  */
 bool isRS485Available();
-
-/**
- * Check if Modbus interface is available
- * @return true if data is available
- */
-bool isModbusAvailable();
 
 /**
  * Set device ID for filtering commands
