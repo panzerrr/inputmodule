@@ -1,11 +1,17 @@
 #include "rs485_serial.h"
 #include "device_id.h"
 
+void handleUSBSerialCommands(String command);
+
 // Global variables
 static uint8_t currentDeviceID = 0;
 static uint8_t rs485Buffer[RS485_BUFFER_SIZE];
 static uint8_t bufferIndex = 0;
 static RS485Command lastCommand;
+
+// 新增缓冲区
+static char rs485LineBuffer[128];
+static uint8_t rs485LineIndex = 0;
 
 // Forward declaration
 bool processCommand();
@@ -38,37 +44,20 @@ void initRS485Serial() {
  * @return true if a valid command was received
  */
 bool processRS485Commands() {
-    bool commandReceived = false;
-    
     while (RS485Serial.available()) {
-        uint8_t byte = RS485Serial.read();
-        
-        // Simple command protocol: [START][DEVICE_ID][COMMAND][DATA...][END]
-        // START = 0xAA, END = 0x55
-        
-        if (byte == 0xAA) {
-            // Start of new command
-            bufferIndex = 0;
-            rs485Buffer[bufferIndex++] = byte;
-        } else if (bufferIndex > 0 && bufferIndex < RS485_BUFFER_SIZE - 1) {
-            // Add byte to buffer
-            rs485Buffer[bufferIndex++] = byte;
-            
-            // Check for end of command
-            if (byte == 0x55 && bufferIndex >= 4) {
-                // Process complete command
-                if (processCommand()) {
-                    commandReceived = true;
-                }
-                bufferIndex = 0; // Reset for next command
+        char c = RS485Serial.read();
+        if (c == '\n' || rs485LineIndex >= sizeof(rs485LineBuffer) - 1) {
+            rs485LineBuffer[rs485LineIndex] = '\0';
+            if (rs485LineIndex > 0) {
+                // 直接调用主命令解析函数
+                handleUSBSerialCommands(String(rs485LineBuffer));
             }
-        } else {
-            // Invalid state, reset
-            bufferIndex = 0;
+            rs485LineIndex = 0;
+        } else if (c != '\r') {
+            rs485LineBuffer[rs485LineIndex++] = c;
         }
     }
-    
-    return commandReceived;
+    return false;
 }
 
 /**
