@@ -12,11 +12,16 @@ char signalModes[3] = {'v', 'v', 'v'};
 unsigned long lastStatusReport = 0;
 const unsigned long STATUS_REPORT_INTERVAL = 5000; // 5 seconds
 
+// 新增：每通道模式和数值
+char channelModes[3] = {'v', 'v', 'v'}; // 'v' or 'c'
+float channelValues[3] = {0.0f, 0.0f, 0.0f}; // 输出值
+
 // Forward declarations
 void printStatusReport();
 void printHelp();
 void handleUSBSerialCommands();
 void sendTestRS485Command(uint8_t commandType, const uint8_t* data, uint8_t length);
+void setChannelOutput(uint8_t channel, char mode, float value);
 
 void setup() {
     // Initialize USB Serial for debugging
@@ -112,6 +117,17 @@ void printStatusReport() {
     // RS-485 status
     Serial.printf("RS-485: %s\n", isRS485Available() ? "Data Available" : "Idle");
     
+    // 修改 printStatusReport，循环显示每个通道
+    Serial.println("\n=== Channel Status ===");
+    for (int i = 0; i < 3; ++i) {
+        if (channelModes[i] == 'v') {
+            Serial.printf("Channel %d: Voltage mode, %.2fV\n", i+1, channelValues[i]);
+        } else if (channelModes[i] == 'c') {
+            Serial.printf("Channel %d: Current mode, %.2fmA\n", i+1, channelValues[i]);
+        } else {
+            Serial.printf("Channel %d: Unknown mode\n", i+1);
+        }
+    }
     Serial.println("==================\n");
 }
 
@@ -243,25 +259,9 @@ void handleUSBSerialCommands() {
                 
                 if (channel >= 1 && channel <= 3) {
                     if (mode == 'v' || mode == 'c') {
-                        // Set channel mode first
-                        setRelayMode(channel, mode);
-                        
-                        // Then set value
-                        if (mode == 'v') {
-                            if (value >= 0 && value <= 10) {
-                                setVoltageOutput(value);
-                                Serial.printf("Channel %d set to VOLTAGE mode, output %.2fV\n", channel, value);
-                            } else {
-                                Serial.println("Invalid voltage value (0-10V)");
-                            }
-                        } else if (mode == 'c') {
-                            if (value >= 0 && value <= 25) {
-                                setCurrentOutput(value);
-                                Serial.printf("Channel %d set to CURRENT mode, output %.2fmA\n", channel, value);
-                            } else {
-                                Serial.println("Invalid current value (0-25mA)");
-                            }
-                        }
+                        // 修改 handleUSBSerialCommands 逗号命令部分，调用 setChannelOutput
+                        setChannelOutput(channel, mode, value);
+                        Serial.printf("Channel %d set to %s mode, output %.2f%s\n", channel, mode == 'v' ? "VOLTAGE" : "CURRENT", value, mode == 'v' ? "V" : "mA");
                     } else {
                         Serial.println("Invalid mode (v/c)");
                     }
@@ -309,4 +309,16 @@ void printHelp() {
     Serial.println("  Types: I(U64), F(Float), S(Int16)");
     Serial.println("help                    - Show this help");
     Serial.println("========================================\n");
+} 
+
+void setChannelOutput(uint8_t channel, char mode, float value) {
+    if (channel < 1 || channel > 3) return;
+    channelModes[channel - 1] = mode;
+    channelValues[channel - 1] = value;
+    setRelayMode(channel, mode);
+    if (mode == 'v') {
+        setVoltageOutput(value);
+    } else if (mode == 'c') {
+        setCurrentOutput(value);
+    }
 } 
