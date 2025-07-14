@@ -1,4 +1,6 @@
 #include "modbus_handler.h"
+#include "relay_controller.h"
+#include "dac_controller.h"
 
 // Global variables
 uint16_t regAddresses[numRegisters]; 
@@ -27,6 +29,14 @@ void initModbus() {
     mb.begin(&Serial2, TXEN_PIN);
     mb.slave(SLAVE_ID);
     Serial.println("Modbus slave initialized on GPIO 16/17");
+    // 新增：Modbus初始化时关闭全部relay
+    for (int i = 1; i <= 6; ++i) {
+        setRelay(i, false);
+    }
+    // 新增：Modbus初始化时关闭所有模拟量输出
+    setVoltageOutput(0.0f);
+    setCurrentOutput(0.0f);
+    // 如果有多通道DAC/电流源，可在此补充全部通道归零
 }
 
 void processInput(String input) {

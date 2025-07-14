@@ -171,19 +171,16 @@ void handleUSBSerialCommands() {
     if (Serial.available()) {
         String command = Serial.readStringUntil('\n');
         command.trim();
-        command.toLowerCase();
-        
-        if (command.startsWith("ping")) {
-            // Send ping command via RS-485
+        // 不再整体toLowerCase，保留参数原样
+        String cmdLower = command;
+        cmdLower.toLowerCase();
+        if (cmdLower.startsWith("ping")) {
             sendTestRS485Command(CMD_PING, nullptr, 0);
         }
-        else if (command.startsWith("status")) {
-            // Send status request via RS-485
+        else if (cmdLower.startsWith("status")) {
             sendTestRS485Command(CMD_GET_STATUS, nullptr, 0);
         }
-        else if (command.startsWith("voltage")) {
-            // Set voltage via RS-485: voltage <value>
-            // Example: voltage 5.0
+        else if (cmdLower.startsWith("voltage")) {
             float voltage = command.substring(8).toFloat();
             if (voltage >= 0 && voltage <= 10) {
                 uint16_t voltageRaw = (uint16_t)(voltage * 100);
@@ -193,9 +190,7 @@ void handleUSBSerialCommands() {
                 Serial.println("Invalid voltage value (0-10V)");
             }
         }
-        else if (command.startsWith("current")) {
-            // Set current via RS-485: current <value>
-            // Example: current 10.5
+        else if (cmdLower.startsWith("current")) {
             float current = command.substring(8).toFloat();
             if (current >= 0 && current <= 25) {
                 uint16_t currentRaw = (uint16_t)(current * 100);
@@ -205,30 +200,25 @@ void handleUSBSerialCommands() {
                 Serial.println("Invalid current value (0-25mA)");
             }
         }
-        else if (command.startsWith("sine")) {
-            // Start sine wave via RS-485: sine <mode> <center> <amplitude> <period>
-            // Example: sine v 5 2 1000 (voltage mode, center=5, amplitude=2, period=1000ms)
+        else if (cmdLower.startsWith("sine")) {
             int space1 = command.indexOf(' ', 5);
             int space2 = command.indexOf(' ', space1 + 1);
             int space3 = command.indexOf(' ', space2 + 1);
             int space4 = command.indexOf(' ', space3 + 1);
-            
             if (space1 > 0 && space2 > 0 && space3 > 0 && space4 > 0) {
                 char mode = command.charAt(space1 + 1);
                 int center = command.substring(space2 + 1, space3).toInt();
                 int amplitude = command.substring(space3 + 1, space4).toInt();
                 int period = command.substring(space4 + 1).toInt();
-                
                 uint8_t modeByte;
                 switch (mode) {
-                    case 'v': modeByte = 0; break;
-                    case 'c': modeByte = 1; break;
-                    case 'd': modeByte = 2; break;
+                    case 'v': case 'V': modeByte = 0; break;
+                    case 'c': case 'C': modeByte = 1; break;
+                    case 'd': case 'D': modeByte = 2; break;
                     default:
                         Serial.println("Invalid mode (v/c/d)");
                         return;
                 }
-                
                 uint8_t data[6] = {
                     modeByte,
                     (uint8_t)center,
@@ -242,26 +232,24 @@ void handleUSBSerialCommands() {
                 Serial.println("Usage: sine <mode> <center> <amplitude> <period>");
             }
         }
-        else if (command.startsWith("stop")) {
-            // Stop sine wave via RS-485
+        else if (cmdLower.startsWith("stop")) {
             sendTestRS485Command(CMD_STOP_SINE, nullptr, 0);
         }
+        else if (cmdLower.startsWith("modbus")) {
+            String modbusCmd = command.substring(7); // Remove "modbus " prefix
+            processInput(modbusCmd);
+        }
         else if (command.indexOf(',') > 0) {
-            // New format: channel,mode,value
-            // Example: 3,v,2.0 means channel 3 output 2.0V voltage
             int comma1 = command.indexOf(',');
             int comma2 = command.indexOf(',', comma1 + 1);
-            
             if (comma1 > 0 && comma2 > 0) {
                 int channel = command.substring(0, comma1).toInt();
                 char mode = command.charAt(comma1 + 1);
                 float value = command.substring(comma2 + 1).toFloat();
-                
                 if (channel >= 1 && channel <= 3) {
-                    if (mode == 'v' || mode == 'c') {
-                        // 修改 handleUSBSerialCommands 逗号命令部分，调用 setChannelOutput
-                        setChannelOutput(channel, mode, value);
-                        Serial.printf("Channel %d set to %s mode, output %.2f%s\n", channel, mode == 'v' ? "VOLTAGE" : "CURRENT", value, mode == 'v' ? "V" : "mA");
+                    if (mode == 'v' || mode == 'c' || mode == 'V' || mode == 'C') {
+                        setChannelOutput(channel, tolower(mode), value);
+                        Serial.printf("Channel %d set to %s mode, output %.2f%s\n", channel, (mode == 'v' || mode == 'V') ? "VOLTAGE" : "CURRENT", value, (mode == 'v' || mode == 'V') ? "V" : "mA");
                     } else {
                         Serial.println("Invalid mode (v/c)");
                     }
@@ -272,14 +260,8 @@ void handleUSBSerialCommands() {
                 Serial.println("Usage: channel,mode,value (e.g., 3,v,2.0)");
             }
         }
-        else if (command.startsWith("help")) {
+        else if (cmdLower.startsWith("help")) {
             printHelp();
-        }
-        else if (command.startsWith("modbus")) {
-            // Modbus configuration command: modbus <reg_index>,<address>,<type>,<value>
-            // Example: modbus 0,1000,I,12345
-            String modbusCmd = command.substring(7); // Remove "modbus " prefix
-            processInput(modbusCmd);
         }
         else if (command.length() > 0) {
             Serial.println("Unknown command. Type 'help' for available commands.");
