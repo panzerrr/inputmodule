@@ -316,9 +316,11 @@ void parseSineWaveCommand(String input) {
         float period = params.substring(space1 + 1, space2).toFloat();
         float center = params.substring(space2 + 1, space3).toFloat();
         uint8_t signal = params.substring(space3 + 1, space4).toInt();
-        char mode = toLowerCase(params.substring(space4 + 1).charAt(0));
+        char mode = params.substring(space4 + 1).charAt(0);
+        // 使用更高效的字符比较，避免toLowerCase
+        char modeLower = (mode >= 'A' && mode <= 'Z') ? mode + 32 : mode;
         
-        startSineWave(amplitude, period, center, signal, mode, false);
+        startSineWave(amplitude, period, center, signal, modeLower, false);
         
     } else if (input.startsWith("SINE STOP")) {
         stopSineWave();

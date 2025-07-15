@@ -21,26 +21,29 @@ void parseModeCommand(String params) {
     }
 
     int sig = params.substring(0, commaIndex).toInt(); // Get signal number
-    char mode = toLowerCase(params.substring(commaIndex + 1).charAt(0)); // Get mode ('v' or 'c') - case insensitive
+    char mode = params.substring(commaIndex + 1).charAt(0); // Get mode ('v' or 'c')
+    
+    // 使用更高效的字符比较，避免toLowerCase
+    char modeLower = (mode >= 'A' && mode <= 'Z') ? mode + 32 : mode;
 
-    if (sig < 1 || sig > 3 || (mode != 'v' && mode != 'c')) {
+    if (sig < 1 || sig > 3 || (modeLower != 'v' && modeLower != 'c')) {
         Serial.println("Invalid mode. Use 'v' or 'c' (case-insensitive).");
         return;
     }
 
     // Execute protection operation
-    if (mode == 'v') {
+    if (modeLower == 'v') {
         signalMap[sig - 1].currentDAC->setDACOutElectricCurrent(0);
         Serial.printf("SIG%d: Current set to 0mA for protection.\n", sig);
-    } else if (mode == 'c') {
+    } else if (modeLower == 'c') {
         signalMap[sig - 1].voltageDAC->setVoltage(0.0, signalMap[sig - 1].voltageChannel);
         Serial.printf("SIG%d: Voltage set to 0V for protection.\n", sig);
     }
 
     // Update mode status and set relay
-    signalModes[sig - 1] = mode;
-    setRelayMode(sig, mode);
-    Serial.printf("Mode set: SIG%d -> %c\n", sig, mode);
+    signalModes[sig - 1] = modeLower;
+    setRelayMode(sig, modeLower);
+    Serial.printf("Mode set: SIG%d -> %c\n", sig, modeLower);
 }
 
 void parseValueCommand(String params) {
