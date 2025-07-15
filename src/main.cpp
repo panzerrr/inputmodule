@@ -16,6 +16,14 @@ const unsigned long STATUS_REPORT_INTERVAL = 5000; // 5 seconds
 char channelModes[3] = {'v', 'v', 'v'}; // 'v' or 'c'
 float channelValues[3] = {0.0f, 0.0f, 0.0f}; // 输出值
 
+// Modbus正弦波模式全局变量
+bool modbusSineActive = false;
+int modbusSineRegIndex = -1;
+float modbusSineAmplitude = 0;
+float modbusSinePeriod = 1;
+float modbusSineCenter = 0;
+unsigned long modbusSineStartTime = 0;
+
 // Forward declarations
 void printStatusReport();
 void printHelp();
@@ -82,6 +90,30 @@ void loop() {
     
     // Update sine wave generator
     updateSineWave();
+    
+    // Modbus正弦波实时写入
+    if (modbusSineActive && modbusSineRegIndex >= 0 && modbusSineRegIndex < numRegisters) {
+        unsigned long elapsed = millis() - modbusSineStartTime;
+        float t = (elapsed / 1000.0f);
+        float value = modbusSineCenter + modbusSineAmplitude * sin(2 * PI * t / modbusSinePeriod);
+        uint16_t regAddr = regAddresses[modbusSineRegIndex];
+        char type = regTypes[modbusSineRegIndex];
+        if (type == 'F' || type == 'f') {
+            floatValues[modbusSineRegIndex] = value;
+            uint32_t asInt = *(uint32_t*)&value;
+            mb.Hreg(regAddr, (asInt >> 16) & 0xFFFF);
+            mb.Hreg(regAddr + 1, asInt & 0xFFFF);
+        } else if (type == 'I' || type == 'i') {
+            uint64_t v = (uint64_t)value;
+            mb.Hreg(regAddr, (v >> 48) & 0xFFFF);
+            mb.Hreg(regAddr + 1, (v >> 32) & 0xFFFF);
+            mb.Hreg(regAddr + 2, (v >> 16) & 0xFFFF);
+            mb.Hreg(regAddr + 3, v & 0xFFFF);
+        } else if (type == 'S' || type == 's') {
+            int16Values[modbusSineRegIndex] = (int16_t)value;
+            mb.Hreg(regAddr, (int16_t)value);
+        }
+    }
     
     // Periodic status report via USB Serial (for debugging)
     if (millis() - lastStatusReport >= STATUS_REPORT_INTERVAL) {
@@ -240,6 +272,30 @@ void handleUSBSerialCommands() {
             String modbusCmd = command.substring(7); // Remove "modbus " prefix
             processInput(modbusCmd);
         }
+        else if (cmdLower.startsWith("sine_modbus")) {
+            // 例：sine_modbus 5.0 2.0 5.0 0
+            //     幅值 周期(s) 中心 reg_index
+            String params = command.substring(11);
+            params.trim();
+            int space1 = params.indexOf(' ');
+            int space2 = params.indexOf(' ', space1 + 1);
+            int space3 = params.indexOf(' ', space2 + 1);
+            if (space1 > 0 && space2 > 0 && space3 > 0) {
+                modbusSineAmplitude = params.substring(0, space1).toFloat();
+                modbusSinePeriod = params.substring(space1 + 1, space2).toFloat();
+                modbusSineCenter = params.substring(space2 + 1, space3).toFloat();
+                modbusSineRegIndex = params.substring(space3 + 1).toInt();
+                modbusSineActive = true;
+                modbusSineStartTime = millis();
+                Serial.println("Modbus Sinewave started.");
+            } else {
+                Serial.println("Usage: sine_modbus <amplitude> <period> <center> <reg_index>");
+            }
+        }
+        else if (cmdLower.startsWith("stop_modbus_sine")) {
+            modbusSineActive = false;
+            Serial.println("Modbus Sinewave stopped.");
+        }
         else if (command.indexOf(',') > 0) {
             int comma1 = command.indexOf(',');
             int comma2 = command.indexOf(',', comma1 + 1);
@@ -342,6 +398,30 @@ void handleUSBSerialCommands(String command) {
         String modbusCmd = command.substring(7); // Remove "modbus " prefix
         processInput(modbusCmd);
     }
+    else if (cmdLower.startsWith("sine_modbus")) {
+        // 例：sine_modbus 5.0 2.0 5.0 0
+        //     幅值 周期(s) 中心 reg_index
+        String params = command.substring(11);
+        params.trim();
+        int space1 = params.indexOf(' ');
+        int space2 = params.indexOf(' ', space1 + 1);
+        int space3 = params.indexOf(' ', space2 + 1);
+        if (space1 > 0 && space2 > 0 && space3 > 0) {
+            modbusSineAmplitude = params.substring(0, space1).toFloat();
+            modbusSinePeriod = params.substring(space1 + 1, space2).toFloat();
+            modbusSineCenter = params.substring(space2 + 1, space3).toFloat();
+            modbusSineRegIndex = params.substring(space3 + 1).toInt();
+            modbusSineActive = true;
+            modbusSineStartTime = millis();
+            Serial.println("Modbus Sinewave started.");
+        } else {
+            Serial.println("Usage: sine_modbus <amplitude> <period> <center> <reg_index>");
+        }
+    }
+    else if (cmdLower.startsWith("stop_modbus_sine")) {
+        modbusSineActive = false;
+        Serial.println("Modbus Sinewave stopped.");
+    }
     else if (command.indexOf(',') > 0) {
         int comma1 = command.indexOf(',');
         int comma2 = command.indexOf(',', comma1 + 1);
@@ -389,8 +469,10 @@ void printHelp() {
     Serial.println("sine <mode> <c> <a> <p> - Start sine wave");
     Serial.println("stop                    - Stop sine wave");
     Serial.println("modbus <reg>,<addr>,<type>,<value> - Configure Modbus register");
-    Serial.println("  Example: modbus 0,1000,I,12345   - Set register 0 to address 1000, type I, value 12345");
-    Serial.println("  Types: I(U64), F(Float), S(Int16)");
+    Serial.println("  Example: modbus 0,1000,F,0   - Set register 0 to address 1000, type F, value 0");
+    Serial.println("sine_modbus <ampl> <period> <center> <reg_index> - Output sinewave to modbus register");
+    Serial.println("  Example: sine_modbus 5.0 2.0 5.0 0   - 5.0幅值, 2.0秒周期, 5.0中心, 写到第0号modbus寄存器");
+    Serial.println("stop_modbus_sine              - Stop modbus sinewave output");
     Serial.println("help                    - Show this help");
     Serial.println("========================================\n");
 } 
