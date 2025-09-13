@@ -1,4 +1,6 @@
 #include "modbus_handler.h"
+#include "dac_controller.h"
+#include "sine_wave_generator.h"
 
 // Global variables
 uint16_t regAddresses[numRegisters]; 
@@ -66,16 +68,19 @@ void processInput(String input) {
 
     switch (type) {
         case 'I':
+        case 'i':
             u64Values[regIndex] = (uint64_t)valueStr.toInt();
             break;
         case 'F':
+        case 'f':
             floatValues[regIndex] = valueStr.toFloat();
             break;
         case 'S':
+        case 's':
             int16Values[regIndex] = (int16_t)valueStr.toInt();
             break;
         default:
-            Serial.println("Invalid type. Use I, F, or S.");
+            Serial.println("Invalid type. Use I, F, or S (case-insensitive).");
             return;
     }
     dataReady[regIndex] = true;
@@ -95,24 +100,32 @@ void processInput(String input) {
         for (int i = 0; i < numRegisters; i++) {
             switch (regTypes[i]) {
                 case 'I':
+                case 'i':
                     mb.addHreg(regAddresses[i], 0x01, 2);
                     mb.Hreg(regAddresses[i], highWord(u64Values[i]));
                     mb.Hreg(regAddresses[i] + 1, lowWord(u64Values[i]));
                     break;
                 case 'F':
+                case 'f':
                     asInt = *(uint32_t*)&floatValues[i];
                     mb.addHreg(regAddresses[i], 0x01, 2);
                     mb.Hreg(regAddresses[i], highWord(asInt));
                     mb.Hreg(regAddresses[i] + 1, lowWord(asInt));
                     break;
                 case 'S':
+                case 's':
                     mb.addHreg(regAddresses[i], 0x01, 1);
                     mb.Hreg(regAddresses[i], (uint16_t)int16Values[i]);
                     break;
             }
             dataReady[i] = false; // Reset after processing
         }
-        Serial.println("All registers updated");
+        configDone = true;
+        Serial.println("Modbus configuration completed - All registers updated");
+        Serial.println("All analog outputs set to 0 due to Modbus activation");
+        
+        // Set all DAC outputs to 0 when Modbus is activated
+        setAllDACsToZero();
     }
 }
 
@@ -133,3 +146,23 @@ void processInput(String input) {
 // void processInt16(uint16_t regn, int16_t data) {
 //   mb.Hreg(regn, (uint16_t)data);
 // }
+
+/**
+ * Set all DAC outputs to zero when Modbus is activated
+ */
+void setAllDACsToZero() {
+    // Stop all sine wave generation
+    stopSineWave(0); // Stop all channels
+    
+    // Set all voltage DACs to 0
+    gp8413_1.setVoltage(0.0, 0); // SIG1 voltage channel
+    gp8413_1.setVoltage(0.0, 1); // SIG2 voltage channel
+    gp8413_2.setVoltage(0.0, 0); // SIG3 voltage channel
+    
+    // Set all current DACs to 0
+    gp8313_1.setDACOutElectricCurrent(0); // SIG1 current channel
+    gp8313_2.setDACOutElectricCurrent(0); // SIG2 current channel
+    gp8313_3.setDACOutElectricCurrent(0); // SIG3 current channel
+    
+    Serial.println("All DAC outputs set to 0V/0mA");
+}

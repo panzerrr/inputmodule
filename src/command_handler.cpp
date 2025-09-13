@@ -71,7 +71,8 @@ void parseValueCommand(String params) {
             Serial.println("Invalid current value. Use 0-25mA.");
             return;
         }
-        signalMap[sig - 1].currentDAC->setDACOutElectricCurrent(static_cast<uint16_t>(value * 1000));
+        // Convert mA to DAC data: Rset=2kΩ, 25mA = 32767 (15-bit), so 1mA = 1310.68
+        signalMap[sig - 1].currentDAC->setDACOutElectricCurrent(static_cast<uint16_t>(value * 1310.68));
         Serial.printf("Current set: SIG%d -> %.2f mA\n", sig, value);
     } else {
         Serial.printf("Unknown mode '%c' for SIG%d.\n", mode, sig);

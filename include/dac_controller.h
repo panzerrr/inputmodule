@@ -27,9 +27,9 @@ public:
 
     /**
      * Set current output
-     * @param current Target output current (unit: mA), range 0-25mA
+     * @param current Target output current (unit: μA), range 0-25000μA
      */
-    void setDACOutElectricCurrent(uint16_t current) { setDACOutVoltage(current); }
+    void setDACOutElectricCurrent(uint16_t current);
 };
 
 // Global DAC instance declarations

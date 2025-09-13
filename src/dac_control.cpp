@@ -15,11 +15,16 @@ bool GP8413::setVoltage(float voltage, uint8_t channel) {
         return false;
     }
 
-    // Convert voltage to 15-bit DAC data
-    uint16_t data = static_cast<uint16_t>((voltage / 10.0) * _resolution);
+    // Convert voltage to 15-bit DAC data (15-bit resolution = 32767)
+    uint16_t data = static_cast<uint16_t>((voltage / 10.0) * 32767);
+    
     setDACOutVoltage(data, channel); // Call base class setting function
-    Serial.printf("GP8413 Voltage Set: %.2fV on Channel %d (Address 0x%X)\n", voltage, channel, _deviceAddr);
     return true;
+}
+
+// GP8313: Set current output
+void GP8313::setDACOutElectricCurrent(uint16_t current) {
+    setDACOutVoltage(current);
 }
 
 /**
@@ -44,11 +49,41 @@ static float currentVoltageOutput = 0.0f;
 static float currentCurrentOutput = 0.0f;
 
 /**
+ * Test I2C communication with DACs
+ */
+void testDACCommunication() {
+    Serial.println("=== Testing DAC Communication ===");
+    
+    // Test GP8413_1 (Address 0x58)
+    Serial.println("Testing GP8413_1 (Address 0x58)...");
+    bool result1 = gp8413_1.setVoltage(1.0, 0);
+    delay(100);
+    gp8413_1.setVoltage(0.0, 0);
+    
+    // Test GP8413_2 (Address 0x59)
+    Serial.println("Testing GP8413_2 (Address 0x59)...");
+    bool result2 = gp8413_2.setVoltage(1.0, 0);
+    delay(100);
+    gp8413_2.setVoltage(0.0, 0);
+    
+    // Test GP8313_1 (Address 0x5A)
+    Serial.println("Testing GP8313_1 (Address 0x5A)...");
+    gp8313_1.setDACOutElectricCurrent(1000);
+    delay(100);
+    gp8313_1.setDACOutElectricCurrent(0);
+    
+    Serial.println("=== DAC Communication Test Complete ===");
+}
+
+/**
  * Initialize DAC controllers
  */
 void initDACControllers() {
     initializeDACs();
     Serial.println("DAC controllers initialized");
+    
+    // Test communication
+    testDACCommunication();
 }
 
 /**
@@ -77,7 +112,8 @@ void setCurrentOutput(float current) {
     }
     
     currentCurrentOutput = current;
-    gp8313_1.setDACOutElectricCurrent((uint16_t)current);
+    // Convert mA to DAC data: Rset=2kΩ, 25mA = 32767 (15-bit), so 1mA = 1310.68
+    gp8313_1.setDACOutElectricCurrent((uint16_t)(current * 1310.68));
     Serial.printf("Current output set to %.2fmA\n", current);
 }
 

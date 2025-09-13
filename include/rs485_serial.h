@@ -6,8 +6,8 @@
 
 // RS-485 Serial Configuration - Work mode receiving interface (receiving external RS-485 signals)
 #define RS485_SERIAL_NUM 1        // Use Serial1 for receiving external RS-485
-#define RS485_TX_PIN 19           // GPIO 19 for TX (work mode transmit)
-#define RS485_RX_PIN 18           // GPIO 18 for RX (work mode receive)
+#define RS485_TX_PIN 19           // GPIO 19 for TX (另一路RS-485)
+#define RS485_RX_PIN 18           // GPIO 18 for RX (另一路RS-485)
 #define RS485_BAUDRATE 19200      // Baud rate
 #define RS485_PARITY SERIAL_8E1   // 8 data bits, Even parity, 1 stop bit
 

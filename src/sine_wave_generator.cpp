@@ -4,17 +4,16 @@
 #include "utils.h"
 
 // Global variables for sine wave generation
-bool sineWaveActive = false;
+bool sineWaveActive[3] = {false, false, false}; // Per-channel sine wave status
 unsigned long lastUpdateTime = 0;
 const unsigned long UPDATE_INTERVAL = 250; // 0.25 seconds in milliseconds
 
-// Sine wave parameters
-float sineAmplitude = 5.0;    // Default amplitude
-float sinePeriod = 1.0;       // Default period in seconds
-float sineOffset = 5.0;       // Center point (user configurable)
-unsigned long startTime = 0;   // Start time of sine wave
-bool allowOvershoot = false;  // Whether to allow overshoot beyond safe ranges
-char sineWaveMode = 'v';      // Current mode: 'v'=voltage, 'c'=current, 'd'=digital
+// Sine wave parameters per channel
+float sineAmplitude[3] = {5.0, 5.0, 5.0};    // Default amplitude per channel
+float sinePeriod[3] = {1.0, 1.0, 1.0};       // Default period in seconds per channel
+float sineOffset[3] = {5.0, 5.0, 5.0};       // Center point per channel
+unsigned long startTime[3] = {0, 0, 0};       // Start time per channel
+char sineWaveMode[3] = {'v', 'v', 'v'};       // Current mode per channel: 'v'=voltage, 'c'=current
 
 // Signal mapping for sine wave output
 extern char signalModes[3];
@@ -30,9 +29,16 @@ SineSignalMap sineSignalMap[3] = {
  * Initialize sine wave generator
  */
 void initSineWaveGenerator() {
-    sineWaveActive = false;
+    for (int i = 0; i < 3; i++) {
+        sineWaveActive[i] = false;
+        sineAmplitude[i] = 5.0;
+        sinePeriod[i] = 1.0;
+        sineOffset[i] = 5.0;
+        startTime[i] = 0;
+        sineWaveMode[i] = 'v';
+    }
     lastUpdateTime = 0;
-    Serial.println("Sine Wave Generator initialized (experimental feature)");
+    Serial.println("Sine Wave Generator initialized (analog mode only)");
 }
 
 /**
@@ -41,7 +47,7 @@ void initSineWaveGenerator() {
  * @param period: Period in seconds (1-60s)
  * @param center: Center point of the sine wave
  * @param signal: Signal number (1-3)
- * @param mode: 'v' for voltage, 'c' for current, 'd' for digital
+ * @param mode: 'v' for voltage, 'c' for current
  * @param overshoot: Whether to allow overshoot beyond safe ranges
  */
 void startSineWave(float amplitude, float period, float center, uint8_t signal, char mode, bool overshoot) {
@@ -50,10 +56,12 @@ void startSineWave(float amplitude, float period, float center, uint8_t signal, 
         return;
     }
     
-    if (mode != 'v' && mode != 'c' && mode != 'd') {
-        Serial.println("Invalid mode. Use 'v' for voltage, 'c' for current, or 'd' for digital.");
+    if (mode != 'v' && mode != 'c') {
+        Serial.println("Invalid mode. Use 'v' for voltage or 'c' for current.");
         return;
     }
+    
+    int channel = signal - 1; // Convert to 0-based index
     
     // Validate amplitude and center point based on mode
     if (mode == 'v') {
@@ -73,12 +81,12 @@ void startSineWave(float amplitude, float period, float center, uint8_t signal, 
         }
     }
     
-        if (mode == 'c') {
+    if (mode == 'c') {
         if (amplitude < 0) {
             Serial.println("Invalid current amplitude. Use 0 or higher.");
-        return;
-    }
-    
+            return;
+        }
+        
         // Calculate output range
         float minOutput = center - amplitude;
         float maxOutput = center + amplitude;
@@ -90,73 +98,77 @@ void startSineWave(float amplitude, float period, float center, uint8_t signal, 
         }
     }
     
-    if (mode == 'd') {
-        if (amplitude < 0) {
-            Serial.println("Invalid digital amplitude. Use 0 or higher.");
-        return;
-        }
-        
-        // For digital mode, center should be around 0.5 (threshold for HIGH/LOW)
-        // Amplitude determines the range around center
-        float minOutput = center - amplitude;
-        float maxOutput = center + amplitude;
-        
-        Serial.printf("Digital mode: Threshold center=%.2f, amplitude=%.2f\n", center, amplitude);
-        Serial.printf("Digital range: %.2f-%.2f (values > 0.5 = HIGH, <= 0.5 = LOW)\n", minOutput, maxOutput);
-    }
-    
     // Validate period
     if (period < 1.0 || period > 60.0) {
         Serial.println("Invalid period. Use 1-60 seconds.");
         return;
     }
     
-    // Set parameters
-    sineAmplitude = amplitude;
-    sinePeriod = period;
-    sineOffset = center; // User-defined center point
-    allowOvershoot = overshoot;
-    sineWaveMode = mode; // Save the mode
-    startTime = millis();
+    // Set parameters for this channel
+    sineAmplitude[channel] = amplitude;
+    sinePeriod[channel] = period;
+    sineOffset[channel] = center;
+    sineWaveMode[channel] = mode;
+    startTime[channel] = millis();
+    sineWaveActive[channel] = true;
     lastUpdateTime = 0;
-    sineWaveActive = true;
     
-    // Set signal mode (only for analog modes)
-    if (mode != 'd') {
+    // Set signal mode and relay
     signalModes[signal - 1] = mode;
     setRelayMode(signal, mode);
-    }
     
-    const char* modeStr = (mode == 'v') ? "voltage" : (mode == 'c') ? "current" : "digital";
-    const char* unitStr = (mode == 'v') ? "V" : (mode == 'c') ? "mA" : "";
-    
-    Serial.printf("Sine wave started: Signal %d, %s mode\n", signal, modeStr);
-    Serial.printf("Amplitude: %.2f%s, Center: %.2f%s, Period: %.1fs\n", 
-                  amplitude, unitStr, 
-                  center, unitStr, 
-                  period);
-    
-    if (mode == 'd') {
-        Serial.printf("Digital threshold: %.2f (values > 0.5 = HIGH, <= 0.5 = LOW)\n", center);
-    } else {
-        Serial.printf("Output range: %.1f-%.1f%s (will be clamped to safe boundaries)\n", 
-                      center - amplitude, center + amplitude, unitStr);
-    }
+    Serial.printf("Sine wave started on SIG%d: %.2f%s amplitude, %.1fs period, center %.2f%s, %s mode\n",
+                  signal,
+                  amplitude,
+                  (mode == 'v') ? "V" : "mA",
+                  period,
+                  center,
+                  (mode == 'v') ? "V" : "mA",
+                  (mode == 'v') ? "voltage" : "current");
 }
 
 /**
- * Stop sine wave generation
+ * Stop sine wave generation for a specific channel
+ * @param signal: Signal number (1-3), 0 to stop all channels
  */
-void stopSineWave() {
-    if (sineWaveActive) {
-        sineWaveActive = false;
-        Serial.println("Sine wave stopped.");
+void stopSineWave(uint8_t signal) {
+    if (signal == 0) {
+        // Stop all channels
+        bool anyActive = false;
+        for (int i = 0; i < 3; i++) {
+            if (sineWaveActive[i]) {
+                sineWaveActive[i] = false;
+                anyActive = true;
+            }
+        }
         
-        // Reset all outputs to 0 for safety
-        initializeDACs();
-        Serial.println("All outputs reset to 0.");
+        if (anyActive) {
+            Serial.println("All sine waves stopped.");
+            // Reset all outputs to 0 for safety
+            initializeDACs();
+            Serial.println("All outputs reset to 0.");
+        } else {
+            Serial.println("No sine waves are currently active.");
+        }
+    } else if (signal >= 1 && signal <= 3) {
+        // Stop specific channel
+        int channel = signal - 1;
+        if (sineWaveActive[channel]) {
+            sineWaveActive[channel] = false;
+            Serial.printf("Sine wave stopped on SIG%d.\n", signal);
+            
+            // Reset this channel's output to 0
+            if (sineWaveMode[channel] == 'v') {
+                sineSignalMap[channel].voltageDAC->setVoltage(0.0, sineSignalMap[channel].voltageChannel);
+            } else if (sineWaveMode[channel] == 'c') {
+                sineSignalMap[channel].currentDAC->setDACOutElectricCurrent(0);
+            }
+            Serial.printf("SIG%d output reset to 0.\n", signal);
+        } else {
+            Serial.printf("No sine wave is active on SIG%d.\n", signal);
+        }
     } else {
-        Serial.println("No sine wave is currently active.");
+        Serial.println("Invalid signal number. Use 1-3, or 0 to stop all.");
     }
 }
 
@@ -164,10 +176,6 @@ void stopSineWave() {
  * Update sine wave output (call this in main loop)
  */
 void updateSineWave() {
-    if (!sineWaveActive) {
-        return;
-    }
-    
     unsigned long currentTime = millis();
     
     // Check if it's time for next update (every 0.25 seconds)
@@ -177,107 +185,116 @@ void updateSineWave() {
     
     lastUpdateTime = currentTime;
     
-    // Calculate elapsed time since start
-    unsigned long elapsedTime = currentTime - startTime;
-    float timeInSeconds = elapsedTime / 1000.0;
-    
-    // Calculate sine wave value
-    float frequency = 1.0 / sinePeriod;
-    float angle = 2.0 * PI * frequency * timeInSeconds;
-    float sineValue = sin(angle);
-    
-    // Calculate output value
-    float outputValue = sineOffset + (sineValue * sineAmplitude);
-    
-    // Handle different output modes
-    if (sineWaveMode == 'd') {
-        // Digital mode: convert sine wave to HIGH/LOW based on threshold
-        bool digitalOutput = (outputValue > 0.5);
-        
-        // Output digital signal to the active signal
-        for (int sig = 1; sig <= 3; sig++) {
-            if (signalModes[sig - 1] == 'v' || signalModes[sig - 1] == 'c') {
-                // Use voltage channel for digital output (easier to control)
-                digitalWrite(sig == 1 ? 15 : (sig == 2 ? 26 : 33), digitalOutput ? HIGH : LOW);
-            }
+    // Process each active channel
+    for (int channel = 0; channel < 3; channel++) {
+        if (!sineWaveActive[channel]) {
+            continue;
         }
         
-        // Update status display for digital mode
-        static int updateCounter = 0;
-        updateCounter++;
-        if (updateCounter >= 4) {
-            updateCounter = 0;
-            Serial.printf("Digital sine wave: %s at %.1fs (%.1f%% complete)\n", 
-                          digitalOutput ? "HIGH" : "LOW",
-                          timeInSeconds,
-                          (timeInSeconds / sinePeriod) * 100.0);
-        }
-    } else {
-        // Analog mode (voltage/current)
-        // Always ensure output is within valid range (limit at boundaries)
-    if (outputValue < 0) outputValue = 0;
+        // Calculate elapsed time since start for this channel
+        unsigned long elapsedTime = currentTime - startTime[channel];
+        float timeInSeconds = elapsedTime / 1000.0;
         
-        // Check signal mode to determine limits
-        for (int sig = 1; sig <= 3; sig++) {
-            if (signalModes[sig - 1] == 'v' || signalModes[sig - 1] == 'c') {
-                if (signalModes[sig - 1] == 'v' && outputValue > 10.0) outputValue = 10.0; // Voltage mode
-                if (signalModes[sig - 1] == 'c' && outputValue > 25.0) outputValue = 25.0; // Current mode
-            }
+        // Calculate sine wave value for this channel
+        float frequency = 1.0 / sinePeriod[channel];
+        float angle = 2.0 * PI * frequency * timeInSeconds;
+        float sineValue = sin(angle);
+        
+        // Calculate output value for this channel
+        float outputValue = sineOffset[channel] + (sineValue * sineAmplitude[channel]);
+        
+        // Clamp output to safe ranges
+        if (outputValue < 0) outputValue = 0;
+        if (sineWaveMode[channel] == 'v' && outputValue > 10.0) outputValue = 10.0;
+        if (sineWaveMode[channel] == 'c' && outputValue > 25.0) outputValue = 25.0;
+        
+        // Output to this channel
+        if (sineWaveMode[channel] == 'v') {
+            sineSignalMap[channel].voltageDAC->setVoltage(outputValue, sineSignalMap[channel].voltageChannel);
+        } else if (sineWaveMode[channel] == 'c') {
+            // Convert mA to DAC data: Rset=2kΩ, 25mA = 32767 (15-bit), so 1mA = 1310.68
+            sineSignalMap[channel].currentDAC->setDACOutElectricCurrent(static_cast<uint16_t>(outputValue * 1310.68));
         }
-    
-    // Output to all active signals
-    for (int sig = 1; sig <= 3; sig++) {
-        if (signalModes[sig - 1] == 'v' || signalModes[sig - 1] == 'c') {
-            if (signalModes[sig - 1] == 'v') {
-                    sineSignalMap[sig - 1].voltageDAC->setVoltage(outputValue, sineSignalMap[sig - 1].voltageChannel);
-            } else {
-                    sineSignalMap[sig - 1].currentDAC->setDACOutElectricCurrent(static_cast<uint16_t>(outputValue * 1000));
-            }
-        }
+        
+        // Status printing removed - use 'SINE STATUS' command to check progress
     }
-    
-        // Print status every 4 updates (every second) for analog mode
-    static int updateCounter = 0;
-    updateCounter++;
-    if (updateCounter >= 4) {
-        updateCounter = 0;
-            Serial.printf("Sine wave: %.2f%s at %.1fs (%.1f%% complete)\n", 
-                          outputValue,
-                          (sineWaveMode == 'v') ? "V" : "mA",
-                      timeInSeconds,
-                      (timeInSeconds / sinePeriod) * 100.0);
-    }
-    }
-    
-
 }
 
 /**
- * Check if sine wave is active
- * @return true if sine wave is active
+ * Check if sine wave is active on any channel
+ * @return true if any sine wave is active
  */
 bool isSineWaveActive() {
-    return sineWaveActive;
+    for (int i = 0; i < 3; i++) {
+        if (sineWaveActive[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Check if sine wave is active on specific channel
+ * @param channel: Channel number (0-2)
+ * @return true if sine wave is active on this channel
+ */
+bool isSineWaveActiveOnChannel(uint8_t channel) {
+    if (channel >= 3) return false;
+    return sineWaveActive[channel];
+}
+
+/**
+ * Get sine wave parameters for specific channel
+ * @param channel: Channel number (0-2)
+ * @param amplitude: Output parameter for amplitude
+ * @param period: Output parameter for period
+ * @param center: Output parameter for center point
+ * @param mode: Output parameter for mode ('v' or 'c')
+ * @return true if sine wave is active on this channel
+ */
+bool getSineWaveParams(uint8_t channel, float* amplitude, float* period, float* center, char* mode) {
+    if (channel >= 3 || !sineWaveActive[channel]) {
+        return false;
+    }
+    
+    *amplitude = sineAmplitude[channel];
+    *period = sinePeriod[channel];
+    *center = sineOffset[channel];
+    *mode = sineWaveMode[channel];
+    
+    return true;
 }
 
 /**
  * Get sine wave status
  */
 void getSineWaveStatus() {
-    if (sineWaveActive) {
-        unsigned long currentTime = millis();
-        unsigned long elapsedTime = currentTime - startTime;
-        float timeInSeconds = elapsedTime / 1000.0;
-        float progress = (timeInSeconds / sinePeriod) * 100.0;
-        
-        Serial.println("=== SINE WAVE STATUS ===");
-        Serial.printf("Status: ACTIVE\n");
-        Serial.printf("Amplitude: %.2f\n", sineAmplitude);
-        Serial.printf("Period: %.1f seconds\n", sinePeriod);
-        Serial.printf("Elapsed time: %.1f seconds\n", timeInSeconds);
-        Serial.printf("Progress: %.1f%%\n", progress);
-        Serial.printf("Center point: %.2f\n", sineOffset);
-        Serial.printf("Mode: %s\n", (sineWaveMode == 'v') ? "Voltage" : (sineWaveMode == 'c') ? "Current" : "Digital");
+    bool anyActive = false;
+    
+    for (int i = 0; i < 3; i++) {
+        if (sineWaveActive[i]) {
+            if (!anyActive) {
+                Serial.println("=== SINE WAVE STATUS ===");
+                anyActive = true;
+            }
+            
+            unsigned long currentTime = millis();
+            unsigned long elapsedTime = currentTime - startTime[i];
+            float timeInSeconds = elapsedTime / 1000.0;
+            float progress = (timeInSeconds / sinePeriod[i]) * 100.0;
+            
+            Serial.printf("SIG%d: ACTIVE\n", i + 1);
+            Serial.printf("  Amplitude: %.2f%s\n", sineAmplitude[i], (sineWaveMode[i] == 'v') ? "V" : "mA");
+            Serial.printf("  Period: %.1f seconds\n", sinePeriod[i]);
+            Serial.printf("  Elapsed time: %.1f seconds\n", timeInSeconds);
+            Serial.printf("  Progress: %.1f%%\n", progress);
+            Serial.printf("  Center point: %.2f%s\n", sineOffset[i], (sineWaveMode[i] == 'v') ? "V" : "mA");
+            Serial.printf("  Mode: %s\n", (sineWaveMode[i] == 'v') ? "Voltage" : "Current");
+            Serial.println();
+        }
+    }
+    
+    if (anyActive) {
         Serial.println("========================");
     } else {
         Serial.println("Sine wave: INACTIVE");
@@ -321,7 +338,21 @@ void parseSineWaveCommand(String input) {
         startSineWave(amplitude, period, center, signal, mode, false);
         
     } else if (input.startsWith("SINE STOP")) {
-        stopSineWave();
+        String params = input.substring(10); // Remove "SINE STOP "
+        params.trim();
+        
+        if (params.length() == 0) {
+            // Stop all channels
+            stopSineWave(0);
+        } else {
+            // Stop specific channel
+            uint8_t signal = params.toInt();
+            if (signal >= 1 && signal <= 3) {
+                stopSineWave(signal);
+            } else {
+                Serial.println("Invalid signal number. Use 1-3, or no parameter to stop all.");
+            }
+        }
         
     } else if (input.startsWith("SINE STATUS")) {
         getSineWaveStatus();
@@ -329,18 +360,20 @@ void parseSineWaveCommand(String input) {
     } else {
         Serial.println("Invalid sine wave command. Use:");
         Serial.println("  SINE START amplitude period center signal mode");
-        Serial.println("  SINE STOP");
+        Serial.println("  SINE STOP [signal]");
         Serial.println("  SINE STATUS");
-        Serial.println("Example: SINE START 5.0 2.0 5.0 1 V");
-        Serial.println("Example: SINE START 3.0 1.5 2.5 2 C");
+        Serial.println("Examples:");
+        Serial.println("  SINE START 5.0 2.0 5.0 1 V    // Start voltage sine wave on SIG1");
+        Serial.println("  SINE START 3.0 1.5 2.5 2 C    // Start current sine wave on SIG2");
+        Serial.println("  SINE STOP                     // Stop all sine waves");
+        Serial.println("  SINE STOP 1                   // Stop sine wave on SIG1 only");
         Serial.println("Parameters:");
         Serial.println("  amplitude: Peak amplitude from center");
         Serial.println("  period: Period in seconds (1-60s)");
         Serial.println("  center: Center point of the sine wave");
         Serial.println("  signal: Signal number (1-3)");
-        Serial.println("  mode: 'v' for voltage, 'c' for current, 'd' for digital");
+        Serial.println("  mode: 'v' for voltage, 'c' for current");
         Serial.println("Note: Values exceeding safe ranges will be clamped to boundaries:");
         Serial.println("  Voltage: 0-10V, Current: 0-25mA");
-        Serial.println("  Digital: Threshold at center (values > 0.5 = HIGH, <= 0.5 = LOW)");
     }
 } 

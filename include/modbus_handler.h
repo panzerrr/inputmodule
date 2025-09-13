@@ -45,6 +45,9 @@ void initModbus();
 // Process input command
 void processInput(String input);
 
+// Set all DAC outputs to zero when Modbus is activated
+void setAllDACsToZero();
+
 // Process different data types (commented out as per original code)
 // void processU64(uint16_t regn, uint64_t data);
 // void processFloat(uint16_t regn, float data);

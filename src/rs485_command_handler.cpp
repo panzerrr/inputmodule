@@ -4,6 +4,9 @@
 #include "sine_wave_generator.h"
 #include "device_id.h"
 
+// Forward declaration
+void printStatusReport();
+
 /**
  * Initialize RS-485 command handler
  */
@@ -132,6 +135,9 @@ bool handleSetVoltageCommand(const uint8_t* data, uint8_t length) {
     // Set voltage output
     setVoltageOutput(voltage);
     
+    // Trigger status report after successful voltage setting
+    printStatusReport();
+    
     return true;
 }
 
@@ -155,6 +161,9 @@ bool handleSetCurrentCommand(const uint8_t* data, uint8_t length) {
     
     // Set current output
     setCurrentOutput(current);
+    
+    // Trigger status report after successful current setting
+    printStatusReport();
     
     return true;
 }
@@ -254,18 +263,17 @@ bool handleSineWaveCommand(const uint8_t* data, uint8_t length) {
     Serial.printf("RS-485: Sine wave command: Mode=%c, Center=%d, Amplitude=%d, Period=%dms\n", 
                   mode, center, amplitude, period);
     
-    // Start sine wave generation
+    // Start sine wave generation (analog mode only)
     char modeChar;
     switch (mode) {
         case 0: modeChar = 'v'; break; // Voltage
         case 1: modeChar = 'c'; break; // Current
-        case 2: modeChar = 'd'; break; // Digital
         default:
-            Serial.println("RS-485: Invalid sine wave mode");
+            Serial.println("RS-485: Invalid sine wave mode (only voltage=0, current=1 supported)");
             return false;
     }
     
-    startSineWave(amplitude, period, center, 1, modeChar);
+    startSineWave(amplitude, period, center, 1, modeChar, false);
     
     return true;
 }
@@ -279,7 +287,7 @@ bool handleSineWaveCommand(const uint8_t* data, uint8_t length) {
 bool handleStopSineCommand(const uint8_t* data, uint8_t length) {
     Serial.println("RS-485: Stop sine wave command received");
     
-    stopSineWave();
+    stopSineWave(0);  // Stop all channels
     
     return true;
 } 
