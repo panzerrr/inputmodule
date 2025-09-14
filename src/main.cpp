@@ -82,6 +82,15 @@ void loop() {
     // Handle Modbus slave tasks
     mb.task();
     
+    // Debug: Check for incoming Modbus data
+    static unsigned long lastModbusDebug = 0;
+    if (millis() - lastModbusDebug >= 10000) { // Every 10 seconds
+        if (Serial2.available()) {
+            Serial.printf("Modbus Serial2 available bytes: %d\n", Serial2.available());
+        }
+        lastModbusDebug = millis();
+    }
+    
     // Update sine wave generator
     updateSineWave();
     
@@ -302,6 +311,176 @@ void handleUSBSerialCommands() {
                 Serial.println("Usage: channel,mode,value (e.g., 3,v,2.0)");
             }
         }
+        else if (lowerCommand.startsWith("modbus_test")) {
+            // Test Modbus connection
+            Serial.println("=== Modbus Connection Test ===");
+            Serial.printf("Serial2 RX Pin: GPIO%d\n", MODBUS_RX_PIN);
+            Serial.printf("Serial2 TX Pin: GPIO%d\n", MODBUS_TX_PIN);
+            Serial.printf("Baud Rate: %d\n", BAUDRATE);
+            Serial.printf("Parity: 8E1\n");
+            Serial.printf("Slave ID: %d\n", SLAVE_ID);
+            Serial.printf("TXEN Pin: %d\n", TXEN_PIN);
+            Serial.printf("Serial2 available bytes: %d\n", Serial2.available());
+            Serial.println("Available registers:");
+            Serial.println("  0x0000: 0x1234 (Test register 1)");
+            Serial.println("  0x0001: 0x5678 (Test register 2)");
+            Serial.println("  0x0002: 0x9ABC (Test register 3)");
+            Serial.println("  0x0003: 0xDEF0 (Test register 4)");
+            if (configDone) {
+                Serial.println("  User-configured registers are also available");
+            } else {
+                Serial.println("  User registers not configured yet");
+            }
+            
+            Serial.println("Listening for Modbus requests for 15 seconds...");
+            Serial.println("ModbusPoll settings should be:");
+            Serial.println("  - Slave ID: 1");
+            Serial.println("  - Function: 03 (Read Holding Registers)");
+            Serial.println("  - Address: 0");
+            Serial.println("  - Quantity: 1");
+            Serial.println("  - Baud: 19200, 8E1");
+            Serial.println("  - COM Port: Select correct port");
+            Serial.println("");
+            Serial.println("Starting monitoring...");
+            
+            unsigned long startTime = millis();
+            int requestCount = 0;
+            int totalBytes = 0;
+            int modbusResponses = 0;
+            
+            while (millis() - startTime < 15000) {
+                // Check for incoming data
+                if (Serial2.available()) {
+                    int bytes = Serial2.available();
+                    totalBytes += bytes;
+                    requestCount++;
+                    Serial.printf("[%lu] Received data #%d: %d bytes\n", millis() - startTime, requestCount, bytes);
+                    
+                    // Read and display the raw data
+                    uint8_t buffer[64];
+                    int readBytes = Serial2.readBytes(buffer, min(bytes, 64));
+                    Serial.print("Raw data: ");
+                    for (int i = 0; i < readBytes; i++) {
+                        Serial.printf("0x%02X ", buffer[i]);
+                    }
+                    Serial.println();
+                    
+                    // Try to parse as Modbus request
+                    if (readBytes >= 8) { // Minimum Modbus RTU frame size
+                        Serial.printf("Possible Modbus request: Slave=0x%02X, Func=0x%02X\n", buffer[0], buffer[1]);
+                    }
+                }
+                
+                // Process Modbus tasks
+                if (mb.task()) {
+                    modbusResponses++;
+                    Serial.printf("[%lu] Modbus response sent #%d\n", millis() - startTime, modbusResponses);
+                }
+                
+                delay(10);
+            }
+            
+            Serial.printf("Test complete. Received %d data packets, %d total bytes.\n", requestCount, totalBytes);
+            Serial.printf("Sent %d Modbus responses.\n", modbusResponses);
+            
+            if (requestCount == 0) {
+                Serial.println("No data received! Check:");
+                Serial.println("  1. USB-Serial adapter connection");
+                Serial.println("  2. COM port selection in ModbusPoll");
+                Serial.println("  3. Baud rate settings (19200)");
+                Serial.println("  4. USB-Serial adapter driver");
+            } else if (modbusResponses == 0) {
+                Serial.println("Data received but no Modbus responses sent!");
+                Serial.println("Check Modbus protocol settings:");
+                Serial.println("  - Slave ID must be 1");
+                Serial.println("  - Function must be 03 (Read Holding Registers)");
+                Serial.println("  - Address must be 0-3");
+            }
+            Serial.println("=============================");
+        }
+        else if (lowerCommand.startsWith("serial_test")) {
+            // Simple Serial2 loopback test
+            Serial.println("=== Serial2 Loopback Test ===");
+            Serial.println("This test will send data via Serial2 TX and read it back via RX");
+            Serial.println("Connect GPIO 16 (RX) to GPIO 17 (TX) with a jumper wire");
+            Serial.println("Starting test in 3 seconds...");
+            delay(3000);
+            
+            const char* testMessage = "ESP32 Serial2 Test Message";
+            Serial.printf("Sending: %s\n", testMessage);
+            Serial2.write(testMessage);
+            Serial2.write('\n');
+            
+            delay(100); // Wait for data to be sent
+            
+            Serial.println("Reading back data...");
+            String received = "";
+            unsigned long startTime = millis();
+            while (millis() - startTime < 2000) {
+                if (Serial2.available()) {
+                    received += (char)Serial2.read();
+                }
+                delay(10);
+            }
+            
+            if (received.length() > 0) {
+                Serial.printf("Received: %s\n", received.c_str());
+                Serial.println("Loopback test PASSED - Serial2 is working!");
+            } else {
+                Serial.println("Loopback test FAILED - No data received");
+                Serial.println("Check jumper wire connection between GPIO 16 and 17");
+            }
+            Serial.println("=============================");
+        }
+        else if (lowerCommand.startsWith("send_modbus")) {
+            // Send a test Modbus request
+            Serial.println("=== Send Test Modbus Request ===");
+            Serial.println("Sending test Modbus request to read register 0x0000");
+            
+            // Create a simple Modbus RTU request: [Slave ID][Function][Address High][Address Low][Quantity High][Quantity Low][CRC Low][CRC High]
+            uint8_t request[] = {
+                0x01,  // Slave ID
+                0x03,  // Function 03 (Read Holding Registers)
+                0x00,  // Address High
+                0x00,  // Address Low (register 0)
+                0x00,  // Quantity High
+                0x01,  // Quantity Low (1 register)
+                0x84,  // CRC Low (calculated for this request)
+                0x0A   // CRC High
+            };
+            
+            Serial.print("Sending request: ");
+            for (int i = 0; i < 8; i++) {
+                Serial.printf("0x%02X ", request[i]);
+            }
+            Serial.println();
+            
+            Serial2.write(request, 8);
+            Serial2.flush();
+            Serial.println("Request sent via Serial2");
+            
+            // Wait for response
+            Serial.println("Waiting for response...");
+            unsigned long startTime = millis();
+            String response = "";
+            while (millis() - startTime < 2000) {
+                if (Serial2.available()) {
+                    response += (char)Serial2.read();
+                }
+                delay(10);
+            }
+            
+            if (response.length() > 0) {
+                Serial.printf("Received response (%d bytes): ", response.length());
+                for (int i = 0; i < response.length(); i++) {
+                    Serial.printf("0x%02X ", (uint8_t)response[i]);
+                }
+                Serial.println();
+            } else {
+                Serial.println("No response received");
+            }
+            Serial.println("=============================");
+        }
         else if (lowerCommand.startsWith("help")) {
             printHelp();
         }
@@ -341,7 +520,11 @@ void printHelp() {
     Serial.println("modbus <reg>,<addr>,<type>,<value> - Configure Modbus register");
     Serial.println("  Example: modbus 0,1000,I,12345   - Set register 0 to address 1000, type I, value 12345");
     Serial.println("  Types: I(U64), F(Float), S(Int16)");
-    Serial.println("  Note: All 4 registers must be configured to activate Modbus");
+    Serial.println("  Note: Default test registers 0x0000-0x0003 are always available");
+    Serial.println("  User registers are added when all 4 are configured");
+    Serial.println("modbus_test             - Test Modbus connection and show configuration");
+    Serial.println("serial_test             - Test Serial2 loopback (connect GPIO 16 to 17)");
+    Serial.println("send_modbus             - Send test Modbus request");
     Serial.println("help                    - Show this help");
     Serial.println("========================================\n");
 }

@@ -9,6 +9,7 @@
 #define PARITY SERIAL_8E1   // 8 data bits, Even parity, 1 stop bit
 #define MODBUS_TX_PIN 17    // GPIO 17 for Modbus TX
 #define MODBUS_RX_PIN 16    // GPIO 16 for Modbus RX
+// Note: ESP32 Serial2 default pins are GPIO 16(RX) and GPIO 17(TX)
 #define TXEN_PIN -1         // Not used in RS-232 or USB-Serial
 
 // Maximum number of registers supported

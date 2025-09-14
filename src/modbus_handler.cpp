@@ -25,10 +25,30 @@ uint16_t highWord(uint32_t dword) {
 }
 
 void initModbus() {
+    // Initialize Serial2 with explicit pin configuration
     Serial2.begin(BAUDRATE, PARITY, MODBUS_RX_PIN, MODBUS_TX_PIN);
+    delay(100); // Give Serial2 time to initialize
+    
+    // Initialize Modbus with Serial2
     mb.begin(&Serial2, TXEN_PIN);
     mb.slave(SLAVE_ID);
-    Serial.println("Modbus slave initialized on GPIO 16/17");
+    
+    // Add default registers for basic Modbus communication
+    // These registers will always be available for testing
+    mb.addHreg(0x0000, 0x1234);  // Test register 1
+    mb.addHreg(0x0001, 0x5678);  // Test register 2
+    mb.addHreg(0x0002, 0x9ABC);  // Test register 3
+    mb.addHreg(0x0003, 0xDEF0);  // Test register 4
+    
+    Serial.printf("Modbus slave initialized: RX=GPIO%d, TX=GPIO%d, Baud=%d, Parity=8E1\n", 
+                  MODBUS_RX_PIN, MODBUS_TX_PIN, BAUDRATE);
+    Serial.printf("Slave ID: %d, TXEN_PIN: %d\n", SLAVE_ID, TXEN_PIN);
+    Serial.println("Default test registers added: 0x0000-0x0003");
+    Serial.println("Modbus slave is now ready to respond to requests!");
+    
+    // Test Serial2 initialization
+    Serial.printf("Serial2 status: %s\n", Serial2 ? "OK" : "FAILED");
+    Serial.printf("Serial2 available: %d bytes\n", Serial2.available());
 }
 
 void processInput(String input) {
@@ -97,31 +117,42 @@ void processInput(String input) {
     uint32_t asInt = 0; // Initialize outside of the switch scope
 
     if (allReady) {
+        Serial.println("Adding user-configured registers...");
         for (int i = 0; i < numRegisters; i++) {
             switch (regTypes[i]) {
                 case 'I':
                 case 'i':
-                    mb.addHreg(regAddresses[i], 0x01, 2);
+                    // Check if register already exists, if not add it
+                    if (!mb.Hreg(regAddresses[i], false)) {
+                        mb.addHreg(regAddresses[i], 0x01, 2);
+                    }
                     mb.Hreg(regAddresses[i], highWord(u64Values[i]));
                     mb.Hreg(regAddresses[i] + 1, lowWord(u64Values[i]));
+                    Serial.printf("Added U64 register at 0x%04X: %llu\n", regAddresses[i], u64Values[i]);
                     break;
                 case 'F':
                 case 'f':
                     asInt = *(uint32_t*)&floatValues[i];
-                    mb.addHreg(regAddresses[i], 0x01, 2);
+                    if (!mb.Hreg(regAddresses[i], false)) {
+                        mb.addHreg(regAddresses[i], 0x01, 2);
+                    }
                     mb.Hreg(regAddresses[i], highWord(asInt));
                     mb.Hreg(regAddresses[i] + 1, lowWord(asInt));
+                    Serial.printf("Added Float register at 0x%04X: %.2f\n", regAddresses[i], floatValues[i]);
                     break;
                 case 'S':
                 case 's':
-                    mb.addHreg(regAddresses[i], 0x01, 1);
+                    if (!mb.Hreg(regAddresses[i], false)) {
+                        mb.addHreg(regAddresses[i], 0x01, 1);
+                    }
                     mb.Hreg(regAddresses[i], (uint16_t)int16Values[i]);
+                    Serial.printf("Added Int16 register at 0x%04X: %d\n", regAddresses[i], int16Values[i]);
                     break;
             }
             dataReady[i] = false; // Reset after processing
         }
         configDone = true;
-        Serial.println("Modbus configuration completed - All registers updated");
+        Serial.println("Modbus configuration completed - User registers added");
         Serial.println("All analog outputs set to 0 due to Modbus activation");
         
         // Set all DAC outputs to 0 when Modbus is activated
